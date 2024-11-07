@@ -2,18 +2,20 @@
 
 from dataclasses import dataclass, field
 from typing import Optional
+
 import torch
+
 
 @dataclass
 class DataArguments:
     """arguments for data"""
-    
+
     dataset_name: Optional[str] = field(
         default="",
         metadata={
-            "choices": ["mnist"], # no choice really haha
+            "choices": ["mnist"],  # no choice really haha
             "help": "Name of the dataset used",
-        }
+        },
     )
 
     max_eval_samples: int = field(
@@ -36,11 +38,12 @@ class DataArguments:
     def __post_init__(self):
         if self.dataset_name is None:
             raise ValueError("Need a dataset name.")
-        
+
 
 @dataclass
 class TrainingArguments:
     """args for training"""
+
     output_dir: Optional[str] = field(
         default=None,
         metadata={
@@ -72,17 +75,19 @@ class TrainingArguments:
     torch_compile: bool = True
 
     # experiment settings -- for now only one experiment
-    experiment: str = field(
-        default="ssl_experiment_concrete_kl",
-        metadata={
-            "required": False,
-            "help": "Which expt to run (defines model, loss func, dataset, hypothesis)...",
-            "choices": [
-                "ssl_experiment_concrete_kl",
-                "ssl_experiment_softmax_probs", # straight through poole
-            ]
-        }
-    ),
+    experiment: str = (
+        field(
+            default="ssl_experiment_concrete_kl",
+            metadata={
+                "required": False,
+                "help": "Which expt to run (defines model, loss func, dataset, hypothesis)...",
+                "choices": [
+                    "ssl_experiment_concrete_kl",
+                    "ssl_experiment_softmax_probs",  # straight through poole
+                ],
+            },
+        ),
+    )
     exp_name: str = field(
         default="",
         metadata={
@@ -152,5 +157,5 @@ class TrainingArguments:
 
         self.load_best_model_at_end = True
         self.greater_is_better = False
-        
+
         self.do_eval = False

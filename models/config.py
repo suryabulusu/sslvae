@@ -1,6 +1,6 @@
 import json
 
-# self.x_dim = 784 
+# self.x_dim = 784
 # self.h_dims = [512, 256]  # hidden dims in enc and dec
 # self.z_dim = 8  # latent dim size
 # self.num_categories = 4  # number of categories
@@ -35,5 +35,3 @@ class Config:
             return super().__getattribute__(key)
         except AttributeError as e:
             raise e
-
-

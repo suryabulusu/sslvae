@@ -1,19 +1,20 @@
 import abc
+import hashlib
+import json
 import logging
 import os
-import torch
-import json
-import hashlib
-from typing import Dict, Optional
-from run_args import ModelArguments, DataArguments, TrainingArguments
 import sys
-import datasets
-from utils.utils import get_num_proc, dataset_map_multi_worker
-from data_helpers import load_mnist_for_ssl
-from trainers.vae_trainer import VAE
+from typing import Dict, Optional
 
+import datasets
+import torch
+
+from data_helpers import load_mnist_for_ssl
 from models.config import Config
 from models.vae import SSLVAE
+from run_args import DataArguments, ModelArguments, TrainingArguments
+from trainers.vae_trainer import VAE
+from utils.utils import dataset_map_multi_worker, get_num_proc
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,7 @@ logger = logging.getLogger(__name__)
 os.environ["WANDB__SERVICE_WAIT"] = "300"
 os.environ["_WANDB_STARTUP_DEBUG"] = "true"
 
-DATASET_CACHE_PATH = os.environ.get(
-    "MNIST_CACHE", os.path.expanduser("~/.cache/mnist")
-)
+DATASET_CACHE_PATH = os.environ.get("MNIST_CACHE", os.path.expanduser("~/.cache/mnist"))
 
 # Noisy compilation from torch.compile
 # see detailed logs of compilation
@@ -33,6 +32,7 @@ except AttributeError:
     # torch version too low
     pass
 
+
 def md5_hash_kwargs(**kwargs) -> str:
     s = json.dumps(kwargs, sort_keys=True)
     return hashlib.md5(s.encode()).hexdigest()
@@ -41,10 +41,10 @@ def md5_hash_kwargs(**kwargs) -> str:
 class Experiment(abc.ABC):
     # abstract base class
     def __init__(
-            self,
-            model_args: ModelArguments,
-            data_args: DataArguments,
-            training_args: TrainingArguments
+        self,
+        model_args: ModelArguments,
+        data_args: DataArguments,
+        training_args: TrainingArguments,
     ):
         training_args.metric_for_best_model = f"{data_args.dataset_name}_loss"
 
@@ -72,7 +72,7 @@ class Experiment(abc.ABC):
             **vars(self.model_args),
             **vars(self.training_args),
         )
-    
+
     @property
     def kwargs_hash(self) -> str:
         all_args = {
@@ -83,19 +83,19 @@ class Experiment(abc.ABC):
         all_args.pop("local_rank")
         # print("all_args:", all_args)
         return md5_hash_kwargs(**all_args)
-    
+
     @property
     def _is_main_worker(self) -> bool:
         return (self.training_args.local_rank <= 0) and (
             int(os.environ.get("LOCAL_RANK", 0)) <= 0
         )
-    
+
     @property
     @abc.abstractmethod
     def _wandb_project_name(self) -> str:
         # experiment specific
         raise NotImplementedError()
-    
+
     @property
     def _wandb_exp_name(self) -> str:
         name_args = [
@@ -105,7 +105,7 @@ class Experiment(abc.ABC):
         ]
         name_args = [n for n in name_args if ((n is not None) and len(n))]
         return "__".join(name_args)
-    
+
     def _setup_logging(self) -> None:
         logging.basicConfig(
             format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -157,7 +157,7 @@ class Experiment(abc.ABC):
         trainer.save_state()
 
         return metrics
-    
+
     def evaluate(self) -> Dict:
         # eval
         logger.info("*** Evaluate ***")
@@ -173,7 +173,7 @@ class Experiment(abc.ABC):
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
         return metrics
-    
+
     def _get_last_checkpoint(output_dir: str) -> Optional[str]:
         # assumes fol name starts with checkpoint
         checkpoints = [
@@ -182,7 +182,7 @@ class Experiment(abc.ABC):
             if os.path.isdir(os.path.join(output_dir, d)) and d.startswith("checkpoint")
         ]
         return max(checkpoints, key=os.path.getmtime) if checkpoints else None
-    
+
     def _get_checkpoint(self) -> Optional[str]:
         training_args = self.training_args
         last_checkpoint = None
@@ -252,7 +252,7 @@ class Experiment(abc.ABC):
     @abc.abstractmethod
     def load_model(self):
         raise NotImplementedError()
-    
+
     def _load_train_dataset_uncached(self) -> datasets.DatasetDict:
         # train and validation
         data_args = self.data_args
@@ -260,7 +260,9 @@ class Experiment(abc.ABC):
 
         if data_args.use_less_data and data_args.use_less_data > 0:
             for key in mnist:
-                new_length = min(len(mnist[key], data_args.use_less_data)) # need to edit
+                new_length = min(
+                    len(mnist[key], data_args.use_less_data)
+                )  # need to edit
                 mnist[key] = mnist[key].select(range(new_length))
 
         # here comes dataset map multi worker
@@ -271,7 +273,7 @@ class Experiment(abc.ABC):
                 map_fn=lambda x: x,
                 num_proc=get_num_proc(),
                 batched=True,
-                desc="preparing multi worker batches"
+                desc="preparing multi worker batches",
             )
 
         # mnist["train"].set_format("pt")
@@ -279,9 +281,11 @@ class Experiment(abc.ABC):
         return mnist
 
     def load_train_and_val_dataset(self):
-        dataset_kwargs = {"dataset_name": self.data_args.dataset_name} # mnist
+        dataset_kwargs = {"dataset_name": self.data_args.dataset_name}  # mnist
 
-        dataset_path = os.path.join(DATASET_CACHE_PATH, (md5_hash_kwargs(**dataset_kwargs) + ".arrow"))
+        dataset_path = os.path.join(
+            DATASET_CACHE_PATH, (md5_hash_kwargs(**dataset_kwargs) + ".arrow")
+        )
 
         dataset_path = os.environ.get("MNIST_CACHE", dataset_path)
 
@@ -293,19 +297,18 @@ class Experiment(abc.ABC):
             mnist.save_to_disk(dataset_path, max_shard_size="1GB")
 
 
-
 class SSLExperiment(Experiment):
     @property
     def trainer_cls(self):
         return VAE
-    
+
     @property
     def _wandb_project_name(self) -> str:
         return "ssl-vae-with-concrete"
-    
+
     def load_model(self):
         return SSLVAE(config=self.config)
-    
+
     def load_trainer(self):
         model = self.load_model()
         mnist = self.load_train_and_val_dataset()
@@ -317,25 +320,26 @@ class SSLExperiment(Experiment):
         return self.trainer_cls(
             model=model,
             args=self.training_args,
-            dataset=mnist, # what about eval dataset
+            dataset=mnist,  # what about eval dataset
         )
-    
+
 
 class SSLExperimentPoole(SSLExperiment):
     @property
     def trainer_cls(self):
         # return VAEPoole -- straight-through estimator (hard sampling fwd pass)
         raise NotImplementedError()
-    
+
     @property
     def _wandb_project_name(self) -> str:
         return "ssl-vae-poole"
-    
+
 
 EXPERIMENT_CLS_MAP = {
     "ssl_experiment_concrete_kl": SSLExperiment,
-    "ssl_experiment_softmax_probs": SSLExperimentPoole
+    "ssl_experiment_softmax_probs": SSLExperimentPoole,
 }
+
 
 def experiment_from_args(model_args, data_args, training_args) -> Experiment:
     if training_args.experiment in EXPERIMENT_CLS_MAP:

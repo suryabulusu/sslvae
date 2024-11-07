@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from model_utils import device
-    
+
+
 class GaussianSample(nn.Module):
     """
     Last layer for Gaussian variational posterior
     """
+
     def __init__(self, in_features: int, out_features: int):
         super().__init__()
         self.in_features = in_features
@@ -17,13 +19,15 @@ class GaussianSample(nn.Module):
 
     def reparametrize(self, mu: torch.Tensor, log_var: torch.Tensor) -> torch.Tensor:
         # eps ~ N(0, 1) of shape mu
-        eps= torch.randn_like(mu, device=device)
+        eps = torch.randn_like(mu, device=device)
         std = (0.5 * log_var).exp()
         z = mu + std * eps
 
         return z
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         input:
         - penultimate layer of encoded image rep
@@ -37,7 +41,7 @@ class GaussianSample(nn.Module):
         log_var = F.softplus(self.log_var_fn(x))
 
         return self.reparametrize(mu, log_var), mu, log_var
-    
+
 
 class GumbelSoftmaxSample(nn.Module):
     """
@@ -47,11 +51,12 @@ class GumbelSoftmaxSample(nn.Module):
     - forward pass: sample from gumbel sotfmax, take argmax (like categorical)
     - backward pass: pretend it is a concrete dist, take grads
     """
+
     def __init__(self, in_features: int, num_categories: int, tau: float):
         super().__init__()
         self.in_features = in_features
         self.num_categories = num_categories
-        self.tau = tau # temparature
+        self.tau = tau  # temparature
         # low vals of tau => closer to argmax
 
         self.logits_fn = nn.Linear(in_features, num_categories)
@@ -67,10 +72,12 @@ class GumbelSoftmaxSample(nn.Module):
         # return loglogits for concrete dist kl computation
 
         return self.reparametrize(log_logits), log_logits
-    
+
     def reparametrize(self, log_logits):
         """obtains differentiable sample"""
-        gumbel_noise = -torch.log(-torch.log(torch.rand_like(log_logits, device=device) + 1e-8) + 1e-8)
+        gumbel_noise = -torch.log(
+            -torch.log(torch.rand_like(log_logits, device=device) + 1e-8) + 1e-8
+        )
         sample = F.softmax((log_logits + gumbel_noise) / self.tau, dim=-1)
 
         return sample
@@ -81,5 +88,3 @@ class GumbelSoftmaxSample(nn.Module):
 # x = torch.randn(32, 128)  # Batch of 32 samples
 # sample, probs = gumbel_sampler(x)
 # print(sample.shape, probs.shape, device)
-
-    

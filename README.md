@@ -7,7 +7,7 @@ Repo Structure from: https://github.com/jxmorris12/vec2text/
 
 Additional experiments.
 - What if we replace VAE loss with Contrastive Divergence Loss from: https://arxiv.org/pdf/1905.04062
-
+- Clever straight-through estimator (Reinmax) due to Heun's methods; from: https://arxiv.org/pdf/2304.08612
 
 References:
 
@@ -16,5 +16,7 @@ References:
 (2) Ruiz, Francisco, and Michalis Titsias. "A contrastive divergence for combining variational inference and mcmc." International Conference on Machine Learning. PMLR, 2019.
 
 (3) Morris, John X., et al. "Text embeddings reveal (almost) as much as text." arXiv preprint arXiv:2310.06816 (2023).
+
+(4) Liu, Liyuan, et al. "Bridging discrete and backpropagation: Straight-through and beyond." Advances in Neural Information Processing Systems 36 (2024).
 
  
